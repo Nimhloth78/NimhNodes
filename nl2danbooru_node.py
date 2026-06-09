@@ -154,6 +154,18 @@ class NL2DanbooruTags:
     CATEGORY      = "NimhNodes"
     OUTPUT_NODE   = True
 
+    # ── ADD THIS METHOD ──────────────────────────────
+    @classmethod
+    def VALIDATE_INPUTS(cls, model, **kwargs):
+        """
+        Bypass ComfyUI's server-side combo validation for the model
+        field, since the dropdown is populated dynamically at runtime.
+        """
+        if model.startswith("("):
+            return "No model selected. Click 🔄 Refresh Models first."
+        return True
+    # ─────────────────────────────────────────────────
+    
     # ── Entry point ──────────────────────────────────────
 
     def convert(
@@ -190,8 +202,8 @@ class NL2DanbooruTags:
         detail_instruction = DETAIL_INSTRUCTIONS.get(
             detail_level, DETAIL_INSTRUCTIONS["standard"]
         )
-        system_content = SYSTEM_PROMPT.format(
-            detail_instruction=detail_instruction
+        system_content = SYSTEM_PROMPT.replace(
+            "{detail_instruction}", detail_instruction
         )
 
         # ── API call ─────────────────────────────────────

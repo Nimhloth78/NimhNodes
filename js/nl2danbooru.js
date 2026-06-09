@@ -19,8 +19,12 @@ app.registerExtension({
             "🔄 Refresh Models",
             async () => {
                 const params = new URLSearchParams();
-                if (apiKeyWidget?.value)  params.set("api_key",  apiKeyWidget.value);
-                if (apiBaseWidget?.value)  params.set("api_base", apiBaseWidget.value);
+                if (apiKeyWidget?.value)  {
+					params.set("api_key",  apiKeyWidget.value);
+				}
+                if (apiBaseWidget?.value)  {
+					params.set("api_base", apiBaseWidget.value);
+				}
 
                 refreshBtn.name = "⏳ Loading…";
 

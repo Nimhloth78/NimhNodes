@@ -180,6 +180,21 @@ class NanoGPT_ChatCompletion:
     FUNCTION      = "run"
     CATEGORY      = "NimhNodes"
     OUTPUT_NODE   = True
+    
+    # ── ADD THIS METHOD ──────────────────────────────
+    @classmethod
+    def VALIDATE_INPUTS(cls, model, **kwargs):
+        """
+        Bypass ComfyUI's server-side combo validation for the model
+        field, since the dropdown is populated dynamically at runtime
+        via the /nanogpt/models endpoint.
+        """
+        # Reject only the placeholder
+        if model.startswith("("):
+            return "No model selected. Click 🔄 Refresh Models first."
+        # Accept any model string — the API will reject invalid ones
+        return True
+    # ─────────────────────────────────────────────────
 
     def run(self, api_key, model, system_prompt, user_prompt,
             temperature, max_tokens,
