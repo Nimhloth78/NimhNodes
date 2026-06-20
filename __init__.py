@@ -43,7 +43,11 @@ _register_nodes(save_folder_node)
 from . import nl2danbooru_node
 _register_nodes(nl2danbooru_node)
 
-# ➌ Add future nodes here:
+# ➎ System Prompt Preset
+from . import sysprom_preset
+_register_nodes(sysprom_preset)
+
+#  Add future nodes here:
 # from . import my_new_node
 # _register_nodes(my_new_node)
 
