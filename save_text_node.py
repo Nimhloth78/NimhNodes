@@ -7,92 +7,64 @@ Files are never overwritten.
 
 import os
 import re
+import time
 import datetime
 import folder_paths
+
+from comfy_api.latest import io
 
 # ──────────────────────────────────────────────
 # Node
 # ──────────────────────────────────────────────
 
-class SaveTextToFile:
-    """
-    Saves text to a new file each time using counter,
-    timestamp, or both for unique naming.
-    """
-
+class SaveTextToFile(io.ComfyNode):
     NAMING_MODES  = ["counter", "timestamp", "counter_and_timestamp"]
     EXTENSIONS    = [".txt", ".md", ".json", ".log", ".csv", ".html", ".xml", ".yaml"]
     ENCODINGS     = ["utf-8", "utf-16", "ascii", "latin-1"]
     NEWLINE_MODES = ["system_default", "unix_lf", "windows_crlf"]
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "text": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "placeholder": "Enter text or connect from another node…",
-                }),
-                "base_directory": ("STRING", {
-                    "default": folder_paths.get_output_directory(),
-                    "multiline": False,
-                    "placeholder": "/path/to/output (default: ComfyUI output)",
-                }),
-                "subdirectory": ("STRING", {
-                    "default": "text_files",
-                    "multiline": False,
-                    "placeholder": "subfolder (leave empty for none)",
-                }),
-                "filename_prefix": ("STRING", {
-                    "default": "saved_text",
-                    "multiline": False,
-                }),
-                "file_extension": (cls.EXTENSIONS, {
-                    "default": ".txt",
-                }),
-                "naming_mode": (cls.NAMING_MODES, {
-                    "default": "counter",
-                }),
-                "counter_digits": ("INT", {
-                    "default": 4,
-                    "min": 1,
-                    "max": 10,
-                    "step": 1,
-                    "display": "slider",
-                }),
-                "encoding": (cls.ENCODINGS, {
-                    "default": "utf-8",
-                }),
-                "newline_mode": (cls.NEWLINE_MODES, {
-                    "default": "system_default",
-                }),
-            },
-            "optional": {
-                "prepend_text": ("STRING", {"forceInput": True}),
-                "append_text":  ("STRING", {"forceInput": True}),
-            },
-        }
-
-    RETURN_TYPES = ("STRING", "STRING", "STRING",)
-    RETURN_NAMES = ("saved_text", "file_path", "filename",)
-    FUNCTION     = "save_text"
-    CATEGORY     = "NimhNodes"
-    OUTPUT_NODE  = True
+    def define_schema(cls):
+        return io.Schema(
+            node_id="SaveTextToFile",
+            display_name="💾 Save Text to File",
+            category="NimhNodes",
+            is_output_node=True,
+            inputs=[
+                io.String.Input("text", multiline=True, default="",
+                    placeholder="Enter text or connect from another node…"),
+                io.String.Input("base_directory",
+                    default=folder_paths.get_output_directory(),
+                    placeholder="/path/to/output (default: ComfyUI output)"),
+                io.String.Input("subdirectory", default="text_files",
+                    placeholder="subfolder (leave empty for none)"),
+                io.String.Input("filename_prefix", default="saved_text"),
+                io.Combo.Input("file_extension", options=cls.EXTENSIONS, default=".txt"),
+                io.Combo.Input("naming_mode", options=cls.NAMING_MODES, default="counter"),
+                io.Int.Input("counter_digits", default=4, min=1, max=10, step=1,
+                    display_mode=io.NumberDisplay.slider),
+                io.Combo.Input("encoding", options=cls.ENCODINGS, default="utf-8"),
+                io.Combo.Input("newline_mode", options=cls.NEWLINE_MODES, default="system_default"),
+                io.String.Input("prepend_text", force_input=True, optional=True),
+                io.String.Input("append_text", force_input=True, optional=True),
+            ],
+            outputs=[
+                io.String.Output("saved_text"),
+                io.String.Output("file_path"),
+                io.String.Output("filename"),
+            ],
+        )
 
     @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        # Always execute so a new file is created every queue
-        return float("nan")
+    def fingerprint_inputs(cls, **kwargs):
+        return time.time()
 
-    # ── Main logic ───────────────────────────────────────
-
-    def save_text(
-        self, text, base_directory, subdirectory, filename_prefix,
+    @classmethod
+    def execute(
+        cls, text, base_directory, subdirectory, filename_prefix,
         file_extension, naming_mode, counter_digits, encoding,
         newline_mode, prepend_text="", append_text=""
     ):
-        # 1. Assemble final text
         parts = []
         if prepend_text:
             parts.append(prepend_text)
@@ -101,40 +73,35 @@ class SaveTextToFile:
             parts.append(append_text)
         final_text = "\n".join(parts)
 
-        newline = self._resolve_newline(newline_mode)
+        newline = cls._resolve_newline(newline_mode)
 
-        # 2. Resolve and create directory
-        full_dir = self._resolve_directory(base_directory, subdirectory)
+        full_dir = cls._resolve_directory(base_directory, subdirectory)
         os.makedirs(full_dir, exist_ok=True)
 
-        # 3. Sanitize prefix
-        safe_prefix = self._sanitize_filename(filename_prefix)
+        safe_prefix = cls._sanitize_filename(filename_prefix)
         if not safe_prefix:
             safe_prefix = "saved_text"
 
-        # 4. Generate unique filename
-        filename = self._generate_unique_filename(
+        filename = cls._generate_unique_filename(
             full_dir, safe_prefix, file_extension,
             naming_mode, counter_digits
         )
         full_path = os.path.join(full_dir, filename)
 
-        # 5. Write file
         with open(full_path, "w", encoding=encoding, newline=newline) as f:
             f.write(final_text)
 
         file_size = os.path.getsize(full_path)
         print(f"[SaveText] ✅ Saved {file_size:,} bytes → {full_path}")
 
-        # 6. Return
-        return {
-            "ui": {
+        return io.NodeOutput(
+            final_text, full_path, filename,
+            ui={
                 "saved_path":     [full_path],
                 "saved_filename": [filename],
                 "saved_size":     [f"{file_size:,} bytes"],
             },
-            "result": (final_text, full_path, filename,),
-        }
+        )
 
     # ── Helpers ──────────────────────────────────────────
 
@@ -163,12 +130,13 @@ class SaveTextToFile:
     def _sanitize_filename(name):
         return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name.strip())
 
-    def _generate_unique_filename(self, directory, prefix, ext, mode, padding):
+    @classmethod
+    def _generate_unique_filename(cls, directory, prefix, ext, mode, padding):
         now = datetime.datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
 
         if mode == "counter":
-            counter = self._next_counter(directory, prefix, ext, padding)
+            counter = cls._next_counter(directory, prefix, ext, padding)
             return f"{prefix}_{str(counter).zfill(padding)}{ext}"
 
         if mode == "timestamp":
@@ -181,7 +149,7 @@ class SaveTextToFile:
             return candidate
 
         if mode == "counter_and_timestamp":
-            counter = self._next_counter(directory, prefix, ext, padding)
+            counter = cls._next_counter(directory, prefix, ext, padding)
             return f"{prefix}_{str(counter).zfill(padding)}_{timestamp}{ext}"
 
         return f"{prefix}_{timestamp}{ext}"
@@ -206,15 +174,3 @@ class SaveTextToFile:
                     max_counter = val
 
         return max_counter + 1
-
-# ──────────────────────────────────────────────
-# Registration
-# ──────────────────────────────────────────────
-
-NODE_CLASS_MAPPINGS = {
-    "SaveTextToFile": SaveTextToFile,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "SaveTextToFile": "💾 Save Text to File",
-}

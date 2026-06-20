@@ -1,58 +1,43 @@
 """
-ComfyUI-CustomNodes
-───────────────────
-A unified package for custom ComfyUI nodes.
+ComfyUI-NimhNodes
+─────────────────
+A unified package for custom ComfyUI nodes (V3 API).
 
 TO ADD A NEW NODE:
   1. Create a new file:  my_new_node.py
-  2. Define NODE_CLASS_MAPPINGS and NODE_DISPLAY_NAME_MAPPINGS in it.
-  3. Add one import line below and one register_nodes() call. Done.
+  2. Define a class inheriting from io.ComfyNode with define_schema + execute.
+  3. Import the class here and add it to NimhNodesExtension.get_node_list(). Done.
 """
+
+from typing_extensions import override
+from comfy_api.latest import ComfyExtension, io
 
 WEB_DIRECTORY = "./js"
 
 # ──────────────────────────────────────────────
-# Master registries
+# Import node classes
 # ──────────────────────────────────────────────
-NODE_CLASS_MAPPINGS = {}
-NODE_DISPLAY_NAME_MAPPINGS = {}
-
-def _register_nodes(module):
-    """Merge a node module's mappings into the master registries."""
-    if hasattr(module, "NODE_CLASS_MAPPINGS"):
-        NODE_CLASS_MAPPINGS.update(module.NODE_CLASS_MAPPINGS)
-    if hasattr(module, "NODE_DISPLAY_NAME_MAPPINGS"):
-        NODE_DISPLAY_NAME_MAPPINGS.update(module.NODE_DISPLAY_NAME_MAPPINGS)
+from .nanogpt_node import NanoGPT_ChatCompletion
+from .save_text_node import SaveTextToFile
+from .save_folder_node import SaveFolderString
+from .nl2danbooru_node import NL2DanbooruTags
+from .sysprom_preset import SystemPromptPreset
 
 # ──────────────────────────────────────────────
-# Register each node module
+# Extension registration
 # ──────────────────────────────────────────────
-# ➊ NanoGPT Chat Completion
-from . import nanogpt_node
-_register_nodes(nanogpt_node)
 
-# ➋ Save Text to File
-from . import save_text_node
-_register_nodes(save_text_node)
+class NimhNodesExtension(ComfyExtension):
+    @override
+    async def get_node_list(self) -> list[type[io.ComfyNode]]:
+        return [
+            NanoGPT_ChatCompletion,
+            SaveTextToFile,
+            SaveFolderString,
+            NL2DanbooruTags,
+            SystemPromptPreset,
+        ]
 
-# ➌ Save Folder String
-from . import save_folder_node
-_register_nodes(save_folder_node)
 
-# ➍ Natural Language to Danbooru Tags
-from . import nl2danbooru_node
-_register_nodes(nl2danbooru_node)
-
-# ➎ System Prompt Preset
-from . import sysprom_preset
-_register_nodes(sysprom_preset)
-
-#  Add future nodes here:
-# from . import my_new_node
-# _register_nodes(my_new_node)
-
-# ──────────────────────────────────────────────
-print(f"[CustomNodes] ✅ Loaded {len(NODE_CLASS_MAPPINGS)} node(s): "
-      f"{', '.join(NODE_DISPLAY_NAME_MAPPINGS.values())}")
-
-__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
+async def comfy_entrypoint() -> NimhNodesExtension:
+    return NimhNodesExtension()

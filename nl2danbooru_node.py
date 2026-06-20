@@ -10,6 +10,7 @@ import re
 import urllib.request
 import urllib.error
 
+from comfy_api.latest import io
 from .nanogpt_node import (
     _get_api_key,
     _get_api_base,
@@ -81,95 +82,54 @@ QUALITY_PRESETS = {
 # Node
 # ──────────────────────────────────────────────
 
-class NL2DanbooruTags:
-    """
-    Converts natural language text into Danbooru-style tag prompts
-    using an LLM API (NanoGPT / OpenAI-compatible).
-    All descriptive content is preserved.
-    """
+class NL2DanbooruTags(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="NL2DanbooruTags",
+            display_name="🏷️ Natural Language to Danbooru Tags",
+            category="NimhNodes",
+            is_output_node=True,
+            inputs=[
+                io.String.Input("text", multiline=True, default="",
+                    placeholder="Describe your image in natural language…"),
+                io.String.Input("api_key", default="",
+                    placeholder="sk-… (or set NANOGPT_API_KEY env var)"),
+                io.Combo.Input("model", options=_model_cache),
+                io.Combo.Input("detail_level",
+                    options=["concise", "standard", "detailed", "exhaustive"],
+                    default="standard"),
+                io.Combo.Input("tag_format",
+                    options=["underscored", "spaced"],
+                    default="underscored"),
+                io.Combo.Input("quality_tags",
+                    options=list(QUALITY_PRESETS.keys()),
+                    default="none"),
+                io.Float.Input("temperature", default=0.3, min=0.0, max=1.5, step=0.05,
+                    display_mode=io.NumberDisplay.slider),
+                io.Int.Input("max_tokens", default=512, min=64, max=4096, step=64),
+                io.String.Input("api_base_url", default=DEFAULT_API_BASE, optional=True),
+                io.String.Input("input_text", force_input=True, optional=True),
+                io.String.Input("additional_tags", default="", optional=True,
+                    placeholder="Tags to always include (comma-separated)"),
+                io.String.Input("exclude_tags", multiline=True, default="", optional=True,
+                    placeholder="Tags to remove (comma or newline separated)"),
+            ],
+            outputs=[
+                io.String.Output("tags"),
+                io.String.Output("raw_response"),
+            ],
+        )
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "text": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "placeholder": "Describe your image in natural language…",
-                }),
-                "api_key": ("STRING", {
-                    "default": "",
-                    "multiline": False,
-                    "placeholder": "sk-… (or set NANOGPT_API_KEY env var)",
-                }),
-                "model": (_model_cache,),
-                "detail_level": (
-                    ["concise", "standard", "detailed", "exhaustive"],
-                    {"default": "standard"},
-                ),
-                "tag_format": (
-                    ["underscored", "spaced"],
-                    {"default": "underscored"},
-                ),
-                "quality_tags": (
-                    list(QUALITY_PRESETS.keys()),
-                    {"default": "none"},
-                ),
-                "temperature": ("FLOAT", {
-                    "default": 0.3,
-                    "min": 0.0,
-                    "max": 1.5,
-                    "step": 0.05,
-                    "display": "slider",
-                }),
-                "max_tokens": ("INT", {
-                    "default": 512,
-                    "min": 64,
-                    "max": 4096,
-                    "step": 64,
-                }),
-            },
-            "optional": {
-                "api_base_url": ("STRING", {
-                    "default": DEFAULT_API_BASE,
-                    "multiline": False,
-                }),
-                "input_text": ("STRING", {"forceInput": True}),
-                "additional_tags": ("STRING", {
-                    "default": "",
-                    "multiline": False,
-                    "placeholder": "Tags to always include (comma-separated)",
-                }),
-                "exclude_tags": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "placeholder": "Tags to remove (comma or newline separated)",
-                }),
-            },
-        }
-
-    RETURN_TYPES  = ("STRING", "STRING",)
-    RETURN_NAMES  = ("tags", "raw_response",)
-    FUNCTION      = "convert"
-    CATEGORY      = "NimhNodes"
-    OUTPUT_NODE   = True
-
-    # ── ADD THIS METHOD ──────────────────────────────
-    @classmethod
-    def VALIDATE_INPUTS(cls, model, **kwargs):
-        """
-        Bypass ComfyUI's server-side combo validation for the model
-        field, since the dropdown is populated dynamically at runtime.
-        """
+    def validate_inputs(cls, model, **kwargs):
         if model.startswith("("):
             return "No model selected. Click 🔄 Refresh Models first."
         return True
-    # ─────────────────────────────────────────────────
-    
-    # ── Entry point ──────────────────────────────────────
 
-    def convert(
-        self, text, api_key, model, detail_level, tag_format,
+    @classmethod
+    def execute(
+        cls, text, api_key, model, detail_level, tag_format,
         quality_tags, temperature, max_tokens,
         api_base_url="", input_text="",
         additional_tags="", exclude_tags=""
@@ -187,7 +147,6 @@ class NL2DanbooruTags:
                 "[NL2Danbooru] No model selected. Click 🔄 Refresh Models."
             )
 
-        # Combine text inputs
         if input_text and text:
             full_text = f"{input_text}\n\n{text}"
         elif input_text:
@@ -198,7 +157,6 @@ class NL2DanbooruTags:
         if not full_text.strip():
             raise ValueError("[NL2Danbooru] No text provided to convert.")
 
-        # Build system prompt
         detail_instruction = DETAIL_INSTRUCTIONS.get(
             detail_level, DETAIL_INSTRUCTIONS["standard"]
         )
@@ -206,7 +164,6 @@ class NL2DanbooruTags:
             "{detail_instruction}", detail_instruction
         )
 
-        # ── API call ─────────────────────────────────────
         messages = [
             {"role": "system", "content": system_content},
             {"role": "user",   "content": full_text.strip()},
@@ -240,39 +197,34 @@ class NL2DanbooruTags:
         except urllib.error.URLError as e:
             raise RuntimeError(f"[NL2Danbooru] Connection error: {e.reason}")
 
-        # ── Post-process ─────────────────────────────────
-        exclude_set = self._build_exclude_set(exclude_tags)
-        cleaned = self._clean_tags(raw_response, tag_format, exclude_set)
+        exclude_set = cls._build_exclude_set(exclude_tags)
+        cleaned = cls._clean_tags(raw_response, tag_format, exclude_set)
 
-        # Prepend quality tags
         quality = QUALITY_PRESETS.get(quality_tags, "")
         if quality:
             if tag_format == "spaced":
                 quality = quality.replace("_", " ")
             cleaned = f"{quality}, {cleaned}" if cleaned else quality
 
-        # Append additional tags
         if additional_tags and additional_tags.strip():
             extra = additional_tags.strip().strip(",").strip()
             if tag_format == "underscored":
                 extra = re.sub(r"(?<=\w) (?=\w)", "_", extra)
             cleaned = f"{cleaned}, {extra}" if cleaned else extra
 
-        # Final whitespace / comma cleanup
-        cleaned = re.sub(r",\s*,+", ",", cleaned)       # collapse multiple commas
-        cleaned = re.sub(r"\s{2,}", " ", cleaned)        # collapse whitespace
+        cleaned = re.sub(r",\s*,+", ",", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned)
         cleaned = cleaned.strip().strip(",").strip()
 
         tag_count = len([t for t in cleaned.split(",") if t.strip()])
         print(f"[NL2Danbooru] ✅ Generated {tag_count} tags")
 
-        return (cleaned, raw_response,)
+        return io.NodeOutput(cleaned, raw_response)
 
     # ── Tag cleaning / normalization ─────────────────────
 
     @staticmethod
     def _build_exclude_set(exclude_tags):
-        """Parse the exclude string into a normalized set."""
         exclude_set = set()
         if not exclude_tags:
             return exclude_set
@@ -284,19 +236,13 @@ class NL2DanbooruTags:
 
     @staticmethod
     def _clean_tags(raw_text, tag_format, exclude_set):
-        """
-        Robust post-processing of LLM output into a clean tag string.
-        Handles markdown, preambles, numbered lists, category headers, etc.
-        """
         text = raw_text.strip()
 
-        # ── Strip markdown formatting ────────────────────
-        text = re.sub(r"```[\s\S]*?```", "", text)          # code blocks
-        text = re.sub(r"`([^`]+)`", r"\1", text)            # inline code
-        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)      # bold
-        text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)  # italic
+        text = re.sub(r"```[\s\S]*?```", "", text)
+        text = re.sub(r"`([^`]+)`", r"\1", text)
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+        text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
 
-        # ── Strip common LLM preambles ───────────────────
         preamble_patterns = [
             r"^(?:here\s+(?:are|is)\s+.*?:\s*)",
             r"^(?:(?:the\s+)?(?:danbooru\s+)?tags?\s+.*?:\s*)",
@@ -311,25 +257,20 @@ class NL2DanbooruTags:
         for pat in preamble_patterns:
             text = re.sub(pat, "", text, count=1, flags=re.IGNORECASE)
 
-        # ── Strip trailing LLM commentary ────────────────
-        # Cut off anything after a blank line followed by a sentence
         text = re.sub(
             r"\n\s*\n(?:note|this|these|the above|i |let me|feel free|hope).*",
             "", text, flags=re.IGNORECASE | re.DOTALL
         )
 
-        # ── Strip list / category formatting ─────────────
-        text = re.sub(r"^\d+[\.\)]\s*", "", text, flags=re.MULTILINE)   # numbered lists
-        text = re.sub(r"^[-•·▸►]\s*", "", text, flags=re.MULTILINE)     # bullet points
-        text = re.sub(r"\*\*[^*]+\*\*:?\s*", "", text)                  # **Category**:
+        text = re.sub(r"^\d+[\.\)]\s*", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^[-•·▸►]\s*", "", text, flags=re.MULTILINE)
+        text = re.sub(r"\*\*[^*]+\*\*:?\s*", "", text)
         text = re.sub(
             r"^[A-Za-z_/\s]{2,25}:\s*(?=\w)", "", text, flags=re.MULTILINE
-        )  # "Category:" headers
+        )
 
-        # ── Normalize separators ─────────────────────────
         text = text.replace("\n", ", ").replace(";", ",")
 
-        # ── Split and clean individual tags ──────────────
         raw_tags = [t.strip().strip("\"'()[]{}") for t in text.split(",")]
 
         cleaned = []
@@ -338,26 +279,21 @@ class NL2DanbooruTags:
         for tag in raw_tags:
             tag = tag.strip().strip(".").strip()
 
-            # Skip empty or too-short tokens
             if not tag or len(tag) < 2:
                 continue
 
-            # Skip if it looks like a sentence (LLM explanation leak)
             word_count = len(tag.split())
             if word_count > 6 and "_" not in tag:
                 continue
 
-            # Skip if it's just a number
             if tag.isdigit():
                 continue
 
-            # Apply format preference
             if tag_format == "underscored":
                 tag = re.sub(r"\s+", "_", tag)
             elif tag_format == "spaced":
                 tag = tag.replace("_", " ")
 
-            # Normalize for dedup and exclusion checks
             tag_norm = tag.lower().replace(" ", "_").strip("_")
 
             if tag_norm in seen:
@@ -370,15 +306,3 @@ class NL2DanbooruTags:
             cleaned.append(tag)
 
         return ", ".join(cleaned)
-
-# ──────────────────────────────────────────────
-# Registration
-# ──────────────────────────────────────────────
-
-NODE_CLASS_MAPPINGS = {
-    "NL2DanbooruTags": NL2DanbooruTags,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "NL2DanbooruTags": "🏷️ Natural Language to Danbooru Tags",
-}

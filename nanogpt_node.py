@@ -13,6 +13,7 @@ import urllib.error
 
 from server import PromptServer
 from aiohttp import web
+from comfy_api.latest import ComfyExtension, io
 
 # ──────────────────────────────────────────────
 # Configuration
@@ -128,77 +129,41 @@ async def _route_save_config(request):
 # Node
 # ──────────────────────────────────────────────
 
-class NanoGPT_ChatCompletion:
-    """
-    Sends a chat-completion request to the NanoGPT API
-    and outputs the assistant's reply as a STRING.
-    """
+class NanoGPT_ChatCompletion(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="NanoGPT_ChatCompletion",
+            display_name="💬 NanoGPT Chat Completion",
+            category="NimhNodes",
+            is_output_node=True,
+            inputs=[
+                io.String.Input("api_key", default="",
+                    placeholder="sk-... (or set NANOGPT_API_KEY env var)"),
+                io.Combo.Input("model", options=_model_cache),
+                io.String.Input("system_prompt", multiline=True,
+                    default="You are a helpful assistant."),
+                io.String.Input("user_prompt", multiline=True, default=""),
+                io.Float.Input("temperature", default=0.7, min=0.0, max=2.0, step=0.05,
+                    display_mode=io.NumberDisplay.slider),
+                io.Int.Input("max_tokens", default=1024, min=1, max=128000, step=64),
+                io.String.Input("api_base_url", default=DEFAULT_API_BASE, optional=True),
+                io.String.Input("input_text", force_input=True, optional=True),
+            ],
+            outputs=[
+                io.String.Output("response"),
+            ],
+        )
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "api_key": ("STRING", {
-                    "default": "",
-                    "multiline": False,
-                    "placeholder": "sk-... (or set NANOGPT_API_KEY env var)",
-                }),
-                "model": (_model_cache, ),
-                "system_prompt": ("STRING", {
-                    "default": "You are a helpful assistant.",
-                    "multiline": True,
-                }),
-                "user_prompt": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                }),
-                "temperature": ("FLOAT", {
-                    "default": 0.7,
-                    "min": 0.0,
-                    "max": 2.0,
-                    "step": 0.05,
-                    "display": "slider",
-                }),
-                "max_tokens": ("INT", {
-                    "default": 1024,
-                    "min": 1,
-                    "max": 128000,
-                    "step": 64,
-                }),
-            },
-            "optional": {
-                "api_base_url": ("STRING", {
-                    "default": DEFAULT_API_BASE,
-                    "multiline": False,
-                }),
-                "input_text": ("STRING", {"forceInput": True}),
-            },
-        }
-
-    RETURN_TYPES  = ("STRING",)
-    RETURN_NAMES  = ("response",)
-    FUNCTION      = "run"
-    CATEGORY      = "NimhNodes"
-    OUTPUT_NODE   = True
-    
-    # ── ADD THIS METHOD ──────────────────────────────
-    @classmethod
-    def VALIDATE_INPUTS(cls, model, **kwargs):
-        """
-        Bypass ComfyUI's server-side combo validation for the model
-        field, since the dropdown is populated dynamically at runtime
-        via the /nanogpt/models endpoint.
-        """
-        # Reject only the placeholder
+    def validate_inputs(cls, model, **kwargs):
         if model.startswith("("):
             return "No model selected. Click 🔄 Refresh Models first."
-        # Accept any model string — the API will reject invalid ones
         return True
-    # ─────────────────────────────────────────────────
 
-    def run(self, api_key, model, system_prompt, user_prompt,
-            temperature, max_tokens,
-            api_base_url="", input_text=""):
+    @classmethod
+    def execute(cls, api_key, model, system_prompt, user_prompt,
+                temperature, max_tokens, api_base_url="", input_text=""):
 
         key  = _get_api_key(api_key)
         base = _get_api_base(api_base_url)
@@ -214,7 +179,6 @@ class NanoGPT_ChatCompletion:
                 "[NanoGPT] No model selected. Click 🔄 Refresh Models first."
             )
 
-        # Build user message
         if input_text and user_prompt:
             final_user = f"{input_text}\n\n{user_prompt}"
         elif input_text:
@@ -252,22 +216,10 @@ class NanoGPT_ChatCompletion:
                 raise RuntimeError(f"[NanoGPT] API returned no choices: {result}")
 
             reply = choices[0].get("message", {}).get("content", "")
-            return (reply,)
+            return io.NodeOutput(reply)
 
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")[:1000]
             raise RuntimeError(f"[NanoGPT] API HTTP {e.code}: {body}")
         except urllib.error.URLError as e:
             raise RuntimeError(f"[NanoGPT] Connection error: {e.reason}")
-
-# ──────────────────────────────────────────────
-# Registration
-# ──────────────────────────────────────────────
-
-NODE_CLASS_MAPPINGS = {
-    "NanoGPT_ChatCompletion": NanoGPT_ChatCompletion,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "NanoGPT_ChatCompletion": "💬 NanoGPT Chat Completion",
-}

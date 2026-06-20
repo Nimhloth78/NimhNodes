@@ -11,7 +11,10 @@ import os
 from datetime import datetime
 import json
 
-class SaveFolderString:
+from comfy_api.latest import io
+
+
+class SaveFolderString(io.ComfyNode):
     PRESETS_FILENAME = "save_folder_presets.json"
 
     @classmethod
@@ -21,14 +24,8 @@ class SaveFolderString:
     @classmethod
     def _load_presets(cls):
         defaults = [
-            "Images",
-            "Video",
-            "Inpaint",
-            "Controlnet",
-            "Edits",
-            "Faceswap",
-            "Creatures",
-            "Backdrops",
+            "Images", "Video", "Inpaint", "Controlnet",
+            "Edits", "Faceswap", "Creatures", "Backdrops",
         ]
         try:
             with open(cls._presets_path(), "r", encoding="utf-8") as f:
@@ -46,36 +43,40 @@ class SaveFolderString:
         return defaults
 
     @classmethod
-    def INPUT_TYPES(cls):
+    def define_schema(cls):
         preset_options = ["None"] + cls._load_presets()
-        return {
-            "required": {
-                "preset_folder": (preset_options, {"default": "None"}),
-                "date_folder": ("BOOLEAN", {"default": True}),
-                "date_folder_position": (["first", "last"], {"default": "first"}),
-                "custom_folder": ("STRING", {"default": "", "multiline": False}),
-                "subfolder_1": ("STRING", {"default": "", "multiline": False}),
-                "subfolder_2": ("STRING", {"default": "", "multiline": False}),
-                "subfolder_3": ("STRING", {"default": "", "multiline": False}),
-                "date_in_filename": (["Off", "prefix", "suffix"], {"default": "Off"}),
-                "filename": ("STRING", {"default": "Image", "multiline": False}),
-                "add_timestamp": ("BOOLEAN", {"default": False}),
-                "separator": ("STRING", {"default": "_", "multiline": False}),
-            }
-        }
+        return io.Schema(
+            node_id="SaveFolderString",
+            display_name="📁 Save Folder String",
+            category="NimhNodes",
+            inputs=[
+                io.Combo.Input("preset_folder", options=preset_options, default="None"),
+                io.Boolean.Input("date_folder", default=True),
+                io.Combo.Input("date_folder_position", options=["first", "last"], default="first"),
+                io.String.Input("custom_folder", default=""),
+                io.String.Input("subfolder_1", default=""),
+                io.String.Input("subfolder_2", default=""),
+                io.String.Input("subfolder_3", default=""),
+                io.Combo.Input("date_in_filename", options=["Off", "prefix", "suffix"], default="Off"),
+                io.String.Input("filename", default="Image"),
+                io.Boolean.Input("add_timestamp", default=False),
+                io.String.Input("separator", default="_"),
+            ],
+            outputs=[
+                io.String.Output("path"),
+                io.String.Output("dir_only"),
+                io.String.Output("filename"),
+            ],
+        )
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING",)
-    RETURN_NAMES = ("path", "dir_only", "filename",)
-    FUNCTION = "build"
-    CATEGORY = "NimhNodes"
-
-    def _safe_part(self, s: str) -> str:
-        """Remove characters invalid in file/dir names across OSes."""
+    @staticmethod
+    def _safe_part(s: str) -> str:
         invalid = '<>:"/\\|?*\n\r\t'
         return "".join(c for c in s if c not in invalid).strip()
 
-    def build(
-        self,
+    @classmethod
+    def execute(
+        cls,
         preset_folder: str = "None",
         date_folder: bool = True,
         date_folder_position: str = "first",
@@ -88,23 +89,21 @@ class SaveFolderString:
         add_timestamp: bool = False,
         separator: str = "_",
     ):
-        # Normalize and sanitize
         preset_folder = (preset_folder or "None").strip()
-        custom_folder = self._safe_part(custom_folder or "")
-        subfolder_1   = self._safe_part(subfolder_1 or "")
-        subfolder_2   = self._safe_part(subfolder_2 or "")
-        subfolder_3   = self._safe_part(subfolder_3 or "")
-        filename      = self._safe_part(filename or "Image") or "Image"
-        separator     = self._safe_part(separator or "_") or "_"
+        custom_folder = cls._safe_part(custom_folder or "")
+        subfolder_1   = cls._safe_part(subfolder_1 or "")
+        subfolder_2   = cls._safe_part(subfolder_2 or "")
+        subfolder_3   = cls._safe_part(subfolder_3 or "")
+        filename      = cls._safe_part(filename or "Image") or "Image"
+        separator     = cls._safe_part(separator or "_") or "_"
 
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d")
         time_str = now.strftime("%H-%M-%S")
 
-        # Build folder stack (without date)
         base_parts = []
         if preset_folder and preset_folder != "None":
-            base_parts.append(self._safe_part(preset_folder))
+            base_parts.append(cls._safe_part(preset_folder))
         if custom_folder:
             base_parts.append(custom_folder)
         if subfolder_1:
@@ -114,7 +113,6 @@ class SaveFolderString:
         if subfolder_3:
             base_parts.append(subfolder_3)
 
-        # Inject date folder at chosen position
         if date_folder:
             if (date_folder_position or "first").lower() == "first":
                 parts = [date_str] + base_parts
@@ -123,7 +121,6 @@ class SaveFolderString:
         else:
             parts = base_parts
 
-        # Build filename with optional date and timestamp
         name = filename
         if date_in_filename == "prefix":
             name = f"{date_str}{separator}{filename}"
@@ -133,23 +130,10 @@ class SaveFolderString:
         if add_timestamp:
             name = f"{name}{separator}{time_str}"
 
-        # Join with forward slashes for ComfyUI cross-platform consistency
         folder_path = "/".join(p for p in parts if p)
         path = f"{folder_path}/{name}" if folder_path else name
 
         dir_only = folder_path if folder_path else ""
         filename_only = name
 
-        return (path, dir_only, filename_only,)
-
-# ──────────────────────────────────────────────
-# Registration
-# ──────────────────────────────────────────────
-
-NODE_CLASS_MAPPINGS = {
-    "SaveFolderString": SaveFolderString,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "SaveFolderString": "📁 Save Folder String",
-}
+        return io.NodeOutput(path, dir_only, filename_only)
