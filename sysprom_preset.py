@@ -10,8 +10,22 @@ def list_presets():
             if f.endswith((".md", ".txt")):
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, PROMPT_DIR)
-                presets.append(rel.replace(os.sep, "/"))  # normalize slashes
+                presets.append(rel.replace(os.sep, "/"))
     return presets
+
+def clean_name(rel):
+    """'Image/3_Qwen Selfie.md' -> 'Qwen Selfie'"""
+    name = rel.rpartition("/")[2]          # strip folder
+    name = os.path.splitext(name)[0]       # strip extension
+    head, sep, tail = name.partition("_")  # strip numeric prefix
+    if sep and head.isdigit():
+        name = tail
+    return name
+
+def category_name(rel):
+    """'Image/3_Qwen Selfie.md' -> 'Image'  (root files -> '')"""
+    folder = rel.rpartition("/")[0]
+    return folder
 
 class SystemPromptPreset:
     @classmethod
@@ -26,15 +40,16 @@ class SystemPromptPreset:
 
         return {"required": {"preset": (sorted(list_presets(), key=key),)}}
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("system_prompt",)
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("system_prompt", "preset_name", "category")
     FUNCTION = "load"
     CATEGORY = "NimhNodes"
 
     def load(self, preset):
         path = os.path.join(PROMPT_DIR, *preset.split("/"))
         with open(path, "r", encoding="utf-8") as f:
-            return (f.read(),)
+            text = f.read()
+        return (text, clean_name(preset), category_name(preset))
 
     @classmethod
     def IS_CHANGED(cls, preset):
