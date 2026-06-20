@@ -3,17 +3,28 @@ import folder_paths
 
 PROMPT_DIR = os.path.join(folder_paths.base_path, "system_prompts")
 
+def list_presets():
+    presets = []
+    for root, _, files in os.walk(PROMPT_DIR):
+        for f in files:
+            if f.endswith((".md", ".txt")):
+                full = os.path.join(root, f)
+                rel = os.path.relpath(full, PROMPT_DIR)
+                presets.append(rel.replace(os.sep, "/"))  # normalize slashes
+    return presets
+
 class SystemPromptPreset:
     @classmethod
     def INPUT_TYPES(cls):
         os.makedirs(PROMPT_DIR, exist_ok=True)
-        files = [f for f in os.listdir(PROMPT_DIR)
-                 if f.endswith((".md", ".txt"))]
-        # sort by leading number if present ("0_CharGen.md"), else alpha
-        def key(f):
-            head = f.split("_", 1)[0]
-            return (int(head), f) if head.isdigit() else (9999, f)
-        return {"required": {"preset": (sorted(files, key=key),)}}
+
+        def key(rel):
+            folder, _, name = rel.rpartition("/")
+            head = name.split("_", 1)[0]
+            order = int(head) if head.isdigit() else 9999
+            return (folder.lower(), order, name.lower())
+
+        return {"required": {"preset": (sorted(list_presets(), key=key),)}}
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("system_prompt",)
@@ -21,12 +32,14 @@ class SystemPromptPreset:
     CATEGORY = "NimhNodes"
 
     def load(self, preset):
-        with open(os.path.join(PROMPT_DIR, preset), "r", encoding="utf-8") as f:
+        path = os.path.join(PROMPT_DIR, *preset.split("/"))
+        with open(path, "r", encoding="utf-8") as f:
             return (f.read(),)
 
     @classmethod
     def IS_CHANGED(cls, preset):
-        return os.path.getmtime(os.path.join(PROMPT_DIR, preset))
+        path = os.path.join(PROMPT_DIR, *preset.split("/"))
+        return os.path.getmtime(path)
 
 NODE_CLASS_MAPPINGS = {"SystemPromptPreset": SystemPromptPreset}
 NODE_DISPLAY_NAME_MAPPINGS = {"SystemPromptPreset": "System Prompt Preset"}
