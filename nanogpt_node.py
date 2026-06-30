@@ -219,7 +219,7 @@ class NanoGPT_ChatCompletion(io.ComfyNode):
 
             reply = choices[0].get("message", {}).get("content", "")
             model_used = result.get("model", model)   # API's value, fallback to requested
-            return io.NodeOutput(reply)
+            return io.NodeOutput(reply, model_used)
 
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")[:1000]
