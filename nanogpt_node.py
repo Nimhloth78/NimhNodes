@@ -152,6 +152,8 @@ class NanoGPT_ChatCompletion(io.ComfyNode):
             ],
             outputs=[
                 io.String.Output("response"),
+                io.String.Output("model_used"),
+
             ],
         )
 
@@ -216,6 +218,7 @@ class NanoGPT_ChatCompletion(io.ComfyNode):
                 raise RuntimeError(f"[NanoGPT] API returned no choices: {result}")
 
             reply = choices[0].get("message", {}).get("content", "")
+            model_used = result.get("model", model)   # API's value, fallback to requested
             return io.NodeOutput(reply)
 
         except urllib.error.HTTPError as e:
