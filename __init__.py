@@ -18,6 +18,7 @@ WEB_DIRECTORY = "./js"
 # Import node classes
 # ──────────────────────────────────────────────
 from .nanogpt_node import NanoGPT_ChatCompletion
+from .nanogpt_local_node import NanoGPT_Local_ChatCompletion
 from .save_text_node import SaveTextToFile
 from .save_folder_node import SaveFolderString
 from .nl2danbooru_node import NL2DanbooruTags
@@ -32,6 +33,7 @@ class NimhNodesExtension(ComfyExtension):
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         return [
             NanoGPT_ChatCompletion,
+            NanoGPT_Local_ChatCompletion,
             SaveTextToFile,
             SaveFolderString,
             NL2DanbooruTags,
