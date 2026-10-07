@@ -23,6 +23,7 @@ from .save_text_node import SaveTextToFile
 from .save_folder_node import SaveFolderString
 from .nl2danbooru_node import NL2DanbooruTags
 from .sysprom_preset import SystemPromptPreset
+from .folder_preset_node import FolderPromptPreset
 
 # ──────────────────────────────────────────────
 # Extension registration
@@ -38,6 +39,7 @@ class NimhNodesExtension(ComfyExtension):
             SaveFolderString,
             NL2DanbooruTags,
             SystemPromptPreset,
+            FolderPromptPreset,
         ]
 
 
