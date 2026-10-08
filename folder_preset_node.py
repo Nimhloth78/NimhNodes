@@ -85,7 +85,9 @@ class FolderPromptPreset(io.ComfyNode):
             inputs=[
                 io.String.Input("folder", default="",
                     placeholder="D:/prompts/emotions  (blank = ComfyUI/system_prompts)"),
-                io.Combo.Input("preset", options=presets),
+                io.Combo.Input("preset", options=presets, control_after_generate=True,
+                    tooltip="Use the control widget to step through files after each run "
+                            "(fixed / increment / increment-wrap / decrement / randomize)."),
             ],
             outputs=[
                 io.String.Output("text"),
